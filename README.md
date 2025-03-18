@@ -170,4 +170,4 @@ bash
 
 sqlite3 stock_data.db 'PRAGMA table_info(stock_data);'
 # Verify NUMERIC types for price fields
-I was trying my best but unfortunately, I could not solve this error. so in that case i was following different way to run my code.
+
