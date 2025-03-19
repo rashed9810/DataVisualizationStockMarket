@@ -35,7 +35,7 @@ def init_db():
     ''')
     
     
-    with open('/backend/stock_market_data.json', 'r') as f:
+    with open('stock_market_data.json', 'r') as f:
         data = json.load(f)
     
    
@@ -70,7 +70,7 @@ def dict_factory(cursor, row):
 
 
 def load_json_data():
-    with open('/backend/stock_market_data.json', 'r') as f:
+    with open('stock_market_data.json', 'r') as f:
         return json.load(f)
 
 @app.route('/api/data', methods=['GET'])
