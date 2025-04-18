@@ -1,8 +1,24 @@
 import axios from "axios";
 
+// Determine the API base URL based on environment
+const getBaseUrl = () => {
+  // For production, use the environment variable if available
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+
+  // For local development
+  if (process.env.NODE_ENV === "development") {
+    return "http://localhost:5000";
+  }
+
+  // Default fallback (you can replace this with your deployed backend URL)
+  return "https://stock-market-api.vercel.app";
+};
+
 // Create an axios instance with a base URL
 const api = axios.create({
-  baseURL: "http://localhost:5000",
+  baseURL: getBaseUrl(),
   timeout: 30000, // Increased timeout
   headers: {
     "Content-Type": "application/json",
