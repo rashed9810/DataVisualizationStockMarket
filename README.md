@@ -57,6 +57,7 @@ For future iterations of this project, I plan to:
 ## Setup and Installation
 
 ### Backend Setup
+
 1. Navigate to the backend directory
 2. Create a virtual environment: `python -m venv venv`
 3. Activate the virtual environment:
@@ -66,109 +67,69 @@ For future iterations of this project, I plan to:
 5. Run the Flask server: `python app.py`
 
 ### Frontend Setup
+
 1. Navigate to the frontend directory
 2. Install dependencies: `npm install`
 3. Start the development server: `npm start`
-4. Access the application at http://localhost:3000 
+4. Access the application at http://localhost:3000
 
-### Facing Problem try to solve it but not possible 
-Data Type Consistency: Maintaining consistent numeric types between SQLite database, Flask API, and React frontend proved challenging. The type conversion between Python float values and JavaScript Number type required careful handling. I can not solve this problem perfectly as i was trying my best. whatever i have done this things will upload into my github file.
+## Recent Improvements
 
-## Known Issues
+### Fixed Data Type Consistency Issues
 
-### Numeric Data Type Conversion Error
+We've successfully resolved the data type consistency issues between the SQLite database, Flask API, and React frontend:
 
-**Error Manifestation**:
-```bash
-Uncaught TypeError: _data.close.toFixed is not a function
-This error occurs in the following components:
+1. **Backend Improvements**:
 
-StockCharts component when rendering price values
+   - Implemented robust type conversion using `safe_float()` and `safe_int()` helper functions
+   - Added proper error handling for all database operations
+   - Enhanced logging for better debugging and troubleshooting
 
-DataTable component when formatting numeric cells
+2. **Frontend Improvements**:
 
-Statistics calculations in price displays
+   - Added better error handling for network requests
+   - Implemented loading states with visual feedback
+   - Enhanced form validation for numeric inputs
 
-Root Cause:
-The application currently suffers from inconsistent numeric type handling between backend and frontend:
+3. **API Enhancements**:
+   - Improved error reporting with detailed messages
+   - Added request/response logging for easier debugging
+   - Implemented proper CORS configuration
 
-Backend API sometimes returns numeric fields (open, high, low, close) as strings
+### UI/UX Enhancements
 
-Frontend attempts numeric operations on string values
+1. **Data Table**:
 
-Database schema might not enforce strict numeric types
+   - Fixed save button loading state
+   - Improved error handling during edit operations
+   - Enhanced numeric formatting for better readability
 
-Technical Details:
+2. **Data Source Toggle**:
 
-Backend: SQLite stores numeric values as TEXT if not properly cast
+   - Both JSON and SQL data sources now work correctly
+   - Smooth transition between data sources
 
-API: JSON serialization might convert floats to strings in certain cases
+3. **Delete Confirmation**:
+   - Added animated confirmation dialog
+   - Improved error handling during delete operations
 
-Frontend: Missing type validation before numeric operations
+## Troubleshooting
 
-Required Fixes:
+If you encounter any issues:
 
-Backend Type Enforcement:
+1. **Network Error: Cannot connect to the server**
 
-# In app.py database operations
-cursor.execute('''
-INSERT INTO stock_data (...) VALUES (
-    ?,
-    ?,
-    CAST(? AS REAL),  -- Explicit casting
-    CAST(? AS REAL),
-    CAST(? AS REAL),
-    CAST(? AS REAL),
-    CAST(? AS INTEGER)
-)
-''', (...))
-API Response Validation:
+   - Ensure the backend server is running on port 5000
+   - Check if there are any firewall restrictions
+   - Verify that CORS is properly configured
 
+2. **Data Loading Issues**
 
-# Add response schema validation
-from flask_pydantic import validate
+   - Check if the database file exists and has proper permissions
+   - Verify that the JSON data file is properly formatted
+   - Check the backend server logs for any errors
 
-class StockResponseModel(BaseModel):
-    close: float
-    volume: int
-    # ... other fields with type hints
-
-@app.route('/api/data')
-@validate()
-def get_data():
-    # Returns properly typed response
-Frontend Type Safeguards:
-
-javascript
-
-// Convert API responses to numbers
-const sanitizeStockData = (data) => ({
-    ...data,
-    close: Number(data.close),
-    open: Number(data.open),
-    high: Number(data.high),
-    low: Number(data.low),
-    volume: parseInt(data.volume)
-});
-Temporary Workaround:
-
-javascript
-
-// In frontend components, use safe conversion
-value={item.close ? parseFloat(item.close).toFixed(2) : 'N/A'}
-Verification Steps:
-
-Check API response types:
-
-bash
-
-curl -s http://localhost:5000/api/data | jq '.[0] | {close: .close|type, volume: .volume|type}'
-# Should show: {"close": "number", "volume": "number"}
-Validate database schema:
-
-bash
-
-sqlite3 stock_data.db 'PRAGMA table_info(stock_data);'
-# Verify NUMERIC types for price fields
-
-
+3. **UI Rendering Problems**
+   - Clear your browser cache and reload the page
+   - Check the browser console for any JavaScript errors
+   - Verify that all required dependencies are installed

@@ -15,14 +15,41 @@ const AddStockForm = ({ onCreate, tradeCodes }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // Helper functions for safe type conversion
+  const safeParseFloat = (value) => {
+    if (value === null || value === undefined || value === "") return 0;
+    try {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    } catch (e) {
+      console.error("Error parsing float:", e, value);
+      return 0;
+    }
+  };
+
+  const safeParseInt = (value) => {
+    if (value === null || value === undefined || value === "") return 0;
+    try {
+      // Handle string values with commas
+      if (typeof value === "string" && value.includes(",")) {
+        value = value.replace(/,/g, "");
+      }
+      const parsed = parseInt(value, 10);
+      return isNaN(parsed) ? 0 : parsed;
+    } catch (e) {
+      console.error("Error parsing int:", e, value);
+      return 0;
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let parsedValue = value;
 
     if (["open", "high", "low", "close"].includes(name)) {
-      parsedValue = parseFloat(value);
+      parsedValue = safeParseFloat(value);
     } else if (name === "volume") {
-      parsedValue = parseInt(value);
+      parsedValue = safeParseInt(value);
     }
 
     setFormData({ ...formData, [name]: parsedValue });
@@ -38,18 +65,31 @@ const AddStockForm = ({ onCreate, tradeCodes }) => {
       return;
     }
 
-    
-    if (formData.high < formData.open) {
+    // Ensure all numeric values are properly typed before validation
+    const validatedData = {
+      ...formData,
+      open: safeParseFloat(formData.open),
+      high: safeParseFloat(formData.high),
+      low: safeParseFloat(formData.low),
+      close: safeParseFloat(formData.close),
+      volume: safeParseInt(formData.volume),
+    };
+
+    // Update form data with validated values
+    setFormData(validatedData);
+
+    // Validate price relationships
+    if (validatedData.high < validatedData.open) {
       setError("High price must be greater than or equal to Open price");
       return;
     }
 
-    if (formData.open < formData.low) {
+    if (validatedData.open < validatedData.low) {
       setError("Open price must be greater than or equal to Low price");
       return;
     }
 
-    if (formData.high < formData.low) {
+    if (validatedData.high < validatedData.low) {
       setError("High price must be greater than Low price");
       return;
     }
@@ -59,7 +99,6 @@ const AddStockForm = ({ onCreate, tradeCodes }) => {
       setSuccess(true);
       setError("");
 
-      
       setFormData({
         date: new Date().toISOString().split("T")[0],
         trade_code: tradeCodes[0] || "",
@@ -72,7 +111,6 @@ const AddStockForm = ({ onCreate, tradeCodes }) => {
 
       setValidated(false);
 
-      
       setTimeout(() => {
         setSuccess(false);
       }, 3000);

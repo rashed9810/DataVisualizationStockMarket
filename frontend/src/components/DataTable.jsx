@@ -15,22 +15,46 @@ const DataTable = ({ data, onEdit, onDelete }) => {
   const [editFormData, setEditFormData] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isSaving, setIsSaving] = useState(false);
   const [sortConfig, setSortConfig] = useState({
     key: "date",
     direction: "asc",
   });
   const [searchTerm, setSearchTerm] = useState("");
 
-  
   const handleEditClick = (item) => {
-    
+    // Safely parse numeric values
+    const safeParseFloat = (value) => {
+      if (value === null || value === undefined) return 0;
+      try {
+        return typeof value === "number" ? value : parseFloat(value);
+      } catch (e) {
+        console.error("Error parsing float:", e, value);
+        return 0;
+      }
+    };
+
+    const safeParseInt = (value) => {
+      if (value === null || value === undefined) return 0;
+      try {
+        // Handle string values with commas
+        if (typeof value === "string" && value.includes(",")) {
+          value = value.replace(/,/g, "");
+        }
+        return typeof value === "number" ? value : parseInt(value, 10);
+      } catch (e) {
+        console.error("Error parsing int:", e, value);
+        return 0;
+      }
+    };
+
     const editItem = {
       ...item,
-      open: parseFloat(item.open),
-      high: parseFloat(item.high),
-      low: parseFloat(item.low),
-      close: parseFloat(item.close),
-      volume: parseInt(item.volume, 10),
+      open: safeParseFloat(item.open),
+      high: safeParseFloat(item.high),
+      low: safeParseFloat(item.low),
+      close: safeParseFloat(item.close),
+      volume: safeParseInt(item.volume),
     };
 
     setEditingId(item.id);
@@ -41,7 +65,6 @@ const DataTable = ({ data, onEdit, onDelete }) => {
     const { name, value } = e.target;
     let parsedValue = value;
 
-    
     if (name === "volume") {
       parsedValue = parseInt(value, 10);
       if (isNaN(parsedValue)) parsedValue = 0;
@@ -53,16 +76,39 @@ const DataTable = ({ data, onEdit, onDelete }) => {
     setEditFormData({ ...editFormData, [name]: parsedValue });
   };
 
-  const handleSaveClick = () => {
-    onEdit(editFormData);
-    setEditingId(null);
+  const handleSaveClick = async () => {
+    try {
+      // Validate the data before saving
+      if (editFormData.high < editFormData.low) {
+        alert("High price cannot be less than low price");
+        return;
+      }
+
+      // Show loading state
+      setIsSaving(true);
+
+      // Call the onEdit function and wait for it to complete
+      const success = await onEdit(editFormData);
+
+      // Only clear editing state if save was successful
+      if (success) {
+        setEditingId(null);
+      }
+
+      // Always reset saving state
+      setIsSaving(false);
+    } catch (error) {
+      console.error("Error in handleSaveClick:", error);
+      // Reset saving state
+      setIsSaving(false);
+    }
   };
 
   const handleCancelClick = () => {
+    // Simply clear the editing state
     setEditingId(null);
   };
 
-  
   const requestSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -76,21 +122,34 @@ const DataTable = ({ data, onEdit, onDelete }) => {
     return sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />;
   };
 
-  
   const formatNumber = (value, decimals = 2) => {
     if (value === null || value === undefined) return "N/A";
-    const num = parseFloat(value);
-    return isNaN(num) ? "N/A" : num.toFixed(decimals);
+    let num;
+    try {
+      num = typeof value === "number" ? value : parseFloat(value);
+      return isNaN(num) ? "N/A" : num.toFixed(decimals);
+    } catch (error) {
+      console.error("Error formatting number:", error, value);
+      return "N/A";
+    }
   };
 
-  
   const formatLargeNumber = (value) => {
     if (value === null || value === undefined) return "N/A";
-    const num = parseInt(value, 10);
-    return isNaN(num) ? "N/A" : num.toLocaleString();
+    let num;
+    try {
+      // Handle string values with commas
+      if (typeof value === "string" && value.includes(",")) {
+        value = value.replace(/,/g, "");
+      }
+      num = typeof value === "number" ? value : parseInt(value, 10);
+      return isNaN(num) ? "N/A" : num.toLocaleString();
+    } catch (error) {
+      console.error("Error formatting large number:", error, value);
+      return "N/A";
+    }
   };
 
-  
   const filteredData = data.filter((item) => {
     return (
       item.trade_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,14 +157,11 @@ const DataTable = ({ data, onEdit, onDelete }) => {
     );
   });
 
-  
   const sortedData = [...filteredData].sort((a, b) => {
-   
     if (["open", "high", "low", "close", "volume"].includes(sortConfig.key)) {
       const aValue = parseFloat(a[sortConfig.key]);
       const bValue = parseFloat(b[sortConfig.key]);
 
-     
       if (isNaN(aValue) && isNaN(bValue)) return 0;
       if (isNaN(aValue)) return sortConfig.direction === "asc" ? -1 : 1;
       if (isNaN(bValue)) return sortConfig.direction === "asc" ? 1 : -1;
@@ -113,7 +169,6 @@ const DataTable = ({ data, onEdit, onDelete }) => {
       return sortConfig.direction === "asc" ? aValue - bValue : bValue - aValue;
     }
 
-    
     if (a[sortConfig.key] < b[sortConfig.key]) {
       return sortConfig.direction === "asc" ? -1 : 1;
     }
@@ -123,7 +178,6 @@ const DataTable = ({ data, onEdit, onDelete }) => {
     return 0;
   });
 
-  
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = sortedData.slice(indexOfFirstItem, indexOfLastItem);
@@ -287,14 +341,29 @@ const DataTable = ({ data, onEdit, onDelete }) => {
                         variant="success"
                         size="sm"
                         onClick={handleSaveClick}
-                        className="me-2"
+                        className="me-2 save-edit-btn"
+                        disabled={isSaving}
                       >
-                        <FaSave /> Save
+                        {isSaving ? (
+                          <>
+                            <span
+                              className="spinner-border spinner-border-sm"
+                              role="status"
+                              aria-hidden="true"
+                            ></span>{" "}
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <FaSave /> Save
+                          </>
+                        )}
                       </Button>
                       <Button
                         variant="secondary"
                         size="sm"
                         onClick={handleCancelClick}
+                        className="cancel-edit-btn"
                       >
                         <FaTimes /> Cancel
                       </Button>

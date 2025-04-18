@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "./api";
 import { Tabs, Tab, Container, Alert, Spinner } from "react-bootstrap";
 import DataTable from "./components/DataTable";
 import StockCharts from "./components/StockCharts";
 import TradeCodeSelector from "./components/TradeCodeSelector";
 import AddStockForm from "./components/AddStockForm";
+import DeleteConfirmationModal from "./components/DeleteConfirmationModal";
+import Notification from "./components/Notification";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "animate.css/animate.min.css";
 import "./App.css";
 
 function App() {
@@ -15,13 +18,19 @@ function App() {
   const [selectedTradeCode, setSelectedTradeCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dataSource, setDataSource] = useState("json"); 
+  const [dataSource, setDataSource] = useState("json");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [notification, setNotification] = useState({
+    show: false,
+    message: "",
+    type: "success",
+  });
 
-  
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/data?source=${dataSource}`);
+      const response = await api.get(`/api/data?source=${dataSource}`);
       setData(response.data);
       setError(null);
     } catch (err) {
@@ -30,11 +39,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [dataSource]); 
+  }, [dataSource]);
 
   const fetchTradeCodes = useCallback(async () => {
     try {
-      const response = await axios.get("/api/trade_codes");
+      const response = await api.get("/api/trade_codes");
       setTradeCodes(response.data);
       if (response.data.length > 0 && !selectedTradeCode) {
         setSelectedTradeCode(response.data[0]);
@@ -42,12 +51,12 @@ function App() {
     } catch (err) {
       console.error("Error fetching trade codes:", err);
     }
-  }, [selectedTradeCode]); 
+  }, [selectedTradeCode]);
 
   useEffect(() => {
     fetchData();
     fetchTradeCodes();
-  }, [fetchData, fetchTradeCodes]); 
+  }, [fetchData, fetchTradeCodes]);
 
   useEffect(() => {
     if (selectedTradeCode) {
@@ -61,31 +70,91 @@ function App() {
 
   const handleEdit = async (updatedItem) => {
     try {
-      await axios.put(`/api/data/${updatedItem.id}`, updatedItem);
-      setData(
-        data.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+      console.log("Updating item:", updatedItem);
+      const response = await api.put(
+        `/api/data/${updatedItem.id}`,
+        updatedItem
       );
+
+      if (response.status === 200) {
+        // Update the data in state
+        setData(
+          data.map((item) =>
+            item.id === updatedItem.id ? response.data : item
+          )
+        );
+
+        // Show success notification
+        setNotification({
+          show: true,
+          message: "Item updated successfully",
+          type: "success",
+        });
+
+        return true;
+      } else {
+        throw new Error(response.data?.error || "Failed to update item");
+      }
     } catch (err) {
       console.error("Error updating item:", err);
-      alert("Failed to update item. Please try again.");
+
+      // Show error notification instead of alert
+      setNotification({
+        show: true,
+        message:
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to update item. Please try again.",
+        type: "danger",
+      });
+
+      return false;
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this item?")) {
-      try {
-        await axios.delete(`/api/data/${id}`);
+  const handleDeleteClick = (id) => {
+    setItemToDelete(id);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async (id) => {
+    try {
+      // First check if the item exists in our data
+      const itemExists = data.some((item) => item.id === id);
+      if (!itemExists) {
+        throw new Error("Item not found in the current dataset");
+      }
+
+      const response = await api.delete(`/api/data/${id}`);
+      if (response.status === 200) {
         setData(data.filter((item) => item.id !== id));
-      } catch (err) {
-        console.error("Error deleting item:", err);
-        alert("Failed to delete item. Please try again.");
+        setNotification({
+          show: true,
+          message: "Item deleted successfully",
+          type: "success",
+        });
+        return true;
+      } else {
+        throw new Error(response.data?.error || "Failed to delete item");
+      }
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      // Check if it's a network error
+      if (err.message === "Network Error") {
+        throw new Error("Network Error: Cannot connect to the server");
+      } else {
+        throw new Error(
+          err.response?.data?.error ||
+            err.message ||
+            "Failed to delete item. Please try again."
+        );
       }
     }
   };
 
   const handleCreate = async (newItem) => {
     try {
-      const response = await axios.post("/api/data", newItem);
+      const response = await api.post("/api/data", newItem);
       const createdItem = { id: response.data.id, ...newItem };
       setData([...data, createdItem]);
     } catch (err) {
@@ -104,7 +173,9 @@ function App() {
         <div className="header-section">
           <h1 className="main-title">Stock Market Data Visualization</h1>
           <div className="data-source-toggle">
-            <span>Data Source:</span>
+            <span className="data-source-label">
+              <strong>Data Source:</strong>
+            </span>
             <div className="toggle-switch">
               <input
                 type="checkbox"
@@ -124,12 +195,21 @@ function App() {
           </div>
         </div>
 
-        {error && <Alert variant="danger">{error}</Alert>}
+        {error && (
+          <Alert variant="danger" className="animate__animated animate__fadeIn">
+            {error}
+          </Alert>
+        )}
 
         {loading ? (
           <div className="loading-container">
-            <Spinner animation="border" role="status" variant="primary" />
-            <span>Loading data...</span>
+            <Spinner
+              animation="border"
+              role="status"
+              variant="primary"
+              style={{ width: "3rem", height: "3rem" }}
+            />
+            <span className="loading-text">Loading data...</span>
           </div>
         ) : (
           <>
@@ -147,7 +227,7 @@ function App() {
                 <DataTable
                   data={filteredData}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={handleDeleteClick}
                 />
               </Tab>
               <Tab eventKey="add" title="Add New Data">
@@ -157,6 +237,20 @@ function App() {
           </>
         )}
       </Container>
+
+      <DeleteConfirmationModal
+        show={showDeleteModal}
+        onHide={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteConfirm}
+        itemId={itemToDelete}
+      />
+
+      <Notification
+        show={notification.show}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification({ ...notification, show: false })}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Card,
   Form,
@@ -29,7 +29,52 @@ const StockCharts = ({ data }) => {
   const [processedData, setProcessedData] = useState([]);
   const [error, setError] = useState(null);
 
-  
+  // Helper function to safely convert numeric values
+  const safeParseFloat = useCallback((value) => {
+    if (value === null || value === undefined) return 0;
+    try {
+      return typeof value === "number" ? value : parseFloat(value);
+    } catch (e) {
+      console.error("Error parsing float:", e, value);
+      return 0;
+    }
+  }, []);
+
+  const safeParseInt = useCallback((value) => {
+    if (value === null || value === undefined) return 0;
+    try {
+      // Handle string values with commas
+      if (typeof value === "string" && value.includes(",")) {
+        value = value.replace(/,/g, "");
+      }
+      return typeof value === "number" ? value : parseInt(value, 10);
+    } catch (e) {
+      console.error("Error parsing int:", e, value);
+      return 0;
+    }
+  }, []);
+
+  const calculateMA = useCallback(
+    (data, days) => {
+      const result = [];
+      for (let i = 0; i < data.length; i++) {
+        if (i < days - 1) {
+          result.push(null);
+        } else {
+          let sum = 0;
+          for (let j = 0; j < days; j++) {
+            // Ensure close is a number
+            const closeValue = safeParseFloat(data[i - j].close);
+            sum += closeValue;
+          }
+          result.push(sum / days);
+        }
+      }
+      return result;
+    },
+    [safeParseFloat]
+  );
+
   useEffect(() => {
     try {
       if (!data || data.length === 0) {
@@ -37,12 +82,20 @@ const StockCharts = ({ data }) => {
         return;
       }
 
-      
-      const sortedData = [...data].sort(
+      // Ensure data has proper numeric types
+      const typedData = data.map((item) => ({
+        ...item,
+        open: safeParseFloat(item.open),
+        high: safeParseFloat(item.high),
+        low: safeParseFloat(item.low),
+        close: safeParseFloat(item.close),
+        volume: safeParseInt(item.volume),
+      }));
+
+      const sortedData = [...typedData].sort(
         (a, b) => new Date(a.date) - new Date(b.date)
       );
 
-      
       let filteredData = sortedData;
 
       if (dateRange !== "all") {
@@ -77,9 +130,7 @@ const StockCharts = ({ data }) => {
         }
       }
 
-      
       const chartData = filteredData.map((item) => {
-        
         const open = parseFloat(item.open);
         const high = parseFloat(item.high);
         const low = parseFloat(item.low);
@@ -93,12 +144,11 @@ const StockCharts = ({ data }) => {
           low: isNaN(low) ? 0 : low,
           close: isNaN(close) ? 0 : close,
           volume: isNaN(volume) ? 0 : volume,
-          
+
           id: item.id,
         };
       });
 
-     
       if (chartData.length >= 5) {
         const ma5 = calculateMA(chartData, 5);
         chartData.forEach((item, index) => {
@@ -120,40 +170,26 @@ const StockCharts = ({ data }) => {
       setError("Failed to process chart data. Please check the data format.");
       setProcessedData([]);
     }
-  }, [data, dateRange]);
+  }, [data, dateRange, calculateMA, safeParseFloat, safeParseInt]);
 
-  
-  const calculateMA = (data, days) => {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < days - 1) {
-        result.push(null);
-      } else {
-        let sum = 0;
-        for (let j = 0; j < days; j++) {
-          sum += data[i - j].close;
-        }
-        result.push(sum / days);
-      }
-    }
-    return result;
-  };
-
-  
   const formatNumber = (value, decimals = 2) => {
     if (value === null || value === undefined) return "N/A";
-    const num = parseFloat(value);
-    return isNaN(num) ? "N/A" : num.toFixed(decimals);
+    let num;
+    try {
+      num = typeof value === "number" ? value : parseFloat(value);
+      return isNaN(num) ? "N/A" : num.toFixed(decimals);
+    } catch (error) {
+      console.error("Error formatting number:", error, value);
+      return "N/A";
+    }
   };
 
-  
   const formatLargeNumber = (value) => {
     if (value === null || value === undefined) return "N/A";
     const num = parseInt(value, 10);
     return isNaN(num) ? "N/A" : num.toLocaleString();
   };
 
-  
   const calculateStatistics = () => {
     if (!data || data.length === 0) {
       return {
@@ -169,7 +205,6 @@ const StockCharts = ({ data }) => {
     }
 
     try {
-     
       const closes = data.map((item) => {
         const close = parseFloat(item.close);
         return isNaN(close) ? 0 : close;
@@ -190,7 +225,6 @@ const StockCharts = ({ data }) => {
         return isNaN(volume) ? 0 : volume;
       });
 
-     
       const latestItem = data[data.length - 1];
       const latestClose = parseFloat(latestItem.close);
       const latestVolume = parseInt(latestItem.volume, 10);
@@ -235,15 +269,15 @@ const StockCharts = ({ data }) => {
   const stats = calculateStatistics();
 
   return (
-    <div className="chart-container">
+    <div className="chart-container animate__animated animate__fadeIn">
       <div className="chart-header">
         <h3 className="chart-title">Stock Price Analysis</h3>
-        <div className="d-flex gap-3">
-          <Form.Group>
+        <div className="chart-controls">
+          <Form.Group className="date-range-selector">
             <Form.Select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              size="sm"
+              className="custom-select"
             >
               <option value="all">All Time</option>
               <option value="1m">Last Month</option>
@@ -253,22 +287,25 @@ const StockCharts = ({ data }) => {
             </Form.Select>
           </Form.Group>
 
-          <ButtonGroup size="sm">
+          <ButtonGroup className="chart-type-buttons">
             <Button
               variant={chartType === "line" ? "primary" : "outline-primary"}
               onClick={() => setChartType("line")}
+              className="chart-btn"
             >
               Line
             </Button>
             <Button
               variant={chartType === "bar" ? "primary" : "outline-primary"}
               onClick={() => setChartType("bar")}
+              className="chart-btn"
             >
               Volume
             </Button>
             <Button
               variant={chartType === "combined" ? "primary" : "outline-primary"}
               onClick={() => setChartType("combined")}
+              className="chart-btn"
             >
               Combined
             </Button>
@@ -277,6 +314,7 @@ const StockCharts = ({ data }) => {
                 chartType === "candlestick" ? "primary" : "outline-primary"
               }
               onClick={() => setChartType("candlestick")}
+              className="chart-btn"
             >
               OHLC
             </Button>
@@ -284,10 +322,14 @@ const StockCharts = ({ data }) => {
         </div>
       </div>
 
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && (
+        <Alert variant="danger" className="animate__animated animate__fadeIn">
+          {error}
+        </Alert>
+      )}
 
       {processedData.length === 0 ? (
-        <Alert variant="info">
+        <Alert variant="info" className="animate__animated animate__fadeIn">
           No data available for the selected filters.
         </Alert>
       ) : (
@@ -435,26 +477,28 @@ const StockCharts = ({ data }) => {
 
           <Row className="mt-4">
             <Col md={6}>
-              <Card className="h-100">
-                <Card.Header>Price Statistics</Card.Header>
+              <Card className="stats-card h-100 animate__animated animate__fadeIn">
+                <Card.Header className="stats-header">
+                  Price Statistics
+                </Card.Header>
                 <Card.Body>
-                  <table className="table table-sm">
+                  <table className="table table-sm stats-table">
                     <tbody>
                       <tr>
-                        <td>Latest Close</td>
-                        <td>${stats.latestClose}</td>
+                        <td className="stat-label">Latest Close</td>
+                        <td className="stat-value">${stats.latestClose}</td>
                       </tr>
                       <tr>
-                        <td>Average Close</td>
-                        <td>${stats.avgClose}</td>
+                        <td className="stat-label">Average Close</td>
+                        <td className="stat-value">${stats.avgClose}</td>
                       </tr>
                       <tr>
-                        <td>Highest Price</td>
-                        <td>${stats.highestPrice}</td>
+                        <td className="stat-label">Highest Price</td>
+                        <td className="stat-value">${stats.highestPrice}</td>
                       </tr>
                       <tr>
-                        <td>Lowest Price</td>
-                        <td>${stats.lowestPrice}</td>
+                        <td className="stat-label">Lowest Price</td>
+                        <td className="stat-value">${stats.lowestPrice}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -462,26 +506,28 @@ const StockCharts = ({ data }) => {
               </Card>
             </Col>
             <Col md={6}>
-              <Card className="h-100">
-                <Card.Header>Volume Statistics</Card.Header>
+              <Card className="stats-card h-100 animate__animated animate__fadeIn">
+                <Card.Header className="stats-header">
+                  Volume Statistics
+                </Card.Header>
                 <Card.Body>
-                  <table className="table table-sm">
+                  <table className="table table-sm stats-table">
                     <tbody>
                       <tr>
-                        <td>Latest Volume</td>
-                        <td>{stats.latestVolume}</td>
+                        <td className="stat-label">Latest Volume</td>
+                        <td className="stat-value">{stats.latestVolume}</td>
                       </tr>
                       <tr>
-                        <td>Average Volume</td>
-                        <td>{stats.avgVolume}</td>
+                        <td className="stat-label">Average Volume</td>
+                        <td className="stat-value">{stats.avgVolume}</td>
                       </tr>
                       <tr>
-                        <td>Highest Volume</td>
-                        <td>{stats.highestVolume}</td>
+                        <td className="stat-label">Highest Volume</td>
+                        <td className="stat-value">{stats.highestVolume}</td>
                       </tr>
                       <tr>
-                        <td>Lowest Volume</td>
-                        <td>{stats.lowestVolume}</td>
+                        <td className="stat-label">Lowest Volume</td>
+                        <td className="stat-value">{stats.lowestVolume}</td>
                       </tr>
                     </tbody>
                   </table>
